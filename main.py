@@ -10,6 +10,7 @@ from model import UnetGenerator, Discriminator
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu_number', type=int, default=0)
 parser.add_argument('--image_size', type=int, default=512)
+parser.add_argument('--resume', type=int, default=0)
 parser.add_argument('--exp_name', type=str, default='test')
 parser.add_argument('--model_path', type=str, default='./results/models/')
 parser.add_argument('--dataset_dir', type=str, default='./images/')
@@ -35,6 +36,17 @@ train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle
 # build model
 generator = UnetGenerator(in_channels=3, out_channels=3)
 discriminator = Discriminator(in_channels=6, out_channels=1)
+
+resume_gene_path = model_path + 'checkpoint_generator_%05d.pth.tar' % args.resume
+resume_disc_path = model_path + 'checkpoint_discriminator_%05d.pth.tar' % args.resume
+
+if os.path.exists(resume_gene_path):
+    generator.load_state_dict(torch.load(resume_gene_path)['model'])
+    discriminator.load_state_dict(torch.load(resume_disc_path)['model'])
+
+
+generator = generator.to(device)
+discriminator = discriminator.to(device)
 
 # build optimizer
 optimizer_g = optim.Adam(generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2))
