@@ -56,7 +56,7 @@ class UnetGenerator(nn.Module):
         # fc layers
         self.fc1 = nn.Linear(in_features=1024 * 8 *8, out_features=1024)
         self.fc2 = nn.Linear(in_features=1024, out_features=256)
-        self.fc3 = nn.Linear(in_features=256, out_features=3 * 3 + 3 * 4 + 1)  # 21 + 1(K matrix, Rt matrix, focal length)
+        self.fc3 = nn.Linear(in_features=256, out_features=3 * 4)  # 12(Rt matrix)
         
         # decoder
         if self.mode:
@@ -122,8 +122,9 @@ class UnetGenerator(nn.Module):
         # fc_layer
         fc_x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.fc1(fc_x))
         fc_x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.fc2(fc_x))
-        fc_x = nn.Tanh()(self.fc3(fc_x))
-        print('fully connected layer output:', fc_x)
+        # fc_x = nn.Tanh()(self.fc3(fc_x))
+        fc_x = self.fc3(fc_x)
+        # print('fully connected layer output:', fc_x)
         
         # decoder
         if self.mode:
@@ -182,19 +183,29 @@ class Discriminator(nn.Module):
     
     def __init__(self, in_channels, out_channels):
         super(Discriminator, self).__init__()
-        # input => (6, 128, 128)
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=3, stride=2, padding=1)  # (32, 64, 64)
+        # input => (6, 512, 512)
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=32, kernel_size=3, stride=2, padding=1)  # (32, 256, 256)
         self.bn1 = nn.BatchNorm2d(num_features=32)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)  # (64, 32, 32)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)  # (64, 128, 128)
         self.bn2 = nn.BatchNorm2d(num_features=64)
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)  # (128, 16, 16)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)  # (128, 64, 64)
         self.bn3 = nn.BatchNorm2d(num_features=128)
-        self.conv4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)  # (256, 8, 8)
+        self.conv4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)  # (256, 32, 32)
         self.bn4 = nn.BatchNorm2d(num_features=256)
-        self.conv5 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1)  # (512, 4, 4)
+        self.conv5 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, stride=2, padding=1)  # (512, 16, 16)
         self.bn5 = nn.BatchNorm2d(num_features=512)
-        self.out_patch = nn.Conv2d(in_channels=512, out_channels=out_channels, )  
+        self.conv6 = nn.Conv2d(in_channels=512, out_channels=1024, kernel_size=3, stride=2, padding=1)  # (1024, 8, 8)
+        self.bn6 = nn.BatchNorm2d(num_features=1024)
+        self.out_patch = nn.Conv2d(in_channels=1024, out_channels=out_channels, kernel_size=1)  # (1, 8, 8)  
         
     def forward(self, x):
+        
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn1(self.conv1(x)))  # (batch_size, 32, 256, 256)
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn2(self.conv2(x)))  # (batch_size, 64, 128, 128)
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn3(self.conv3(x)))  # (batch_size, 128, 64, 64)
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn4(self.conv4(x)))  # (batch_size, 256, 32, 32)
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn5(self.conv5(x)))  # (batch_size, 512, 16, 16)
+        x = nn.LeakyReLU(negative_slope=0.2, inplace=True)(self.bn6(self.conv6(x)))  # (batch_size, 1024, 8, 8)
+        x = self.out_patch(x)
         
         return x  

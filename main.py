@@ -10,18 +10,21 @@ from model import UnetGenerator, Discriminator
 parser = argparse.ArgumentParser()
 parser.add_argument('--gpu_number', type=int, default=0)
 parser.add_argument('--image_size', type=int, default=512)
+parser.add_argument('--exp_name', type=str, default='test')
 parser.add_argument('--model_path', type=str, default='./results/models/')
 parser.add_argument('--dataset_dir', type=str, default='./images/')
 parser.add_argument('--batch_size', type=int, default=5)
 parser.add_argument('--epoch', type=int, default=10)
-parser.add_argument('--l1_lambda', type=float, default=10)
-parser.add_argument('--pose_lambda', type=float, default=1.0)
+parser.add_argument('--l1_lambda', type=float, default=0.1)
+parser.add_argument('--pose_lambda', type=float, default=0.1)
 parser.add_argument('--lr', type=float, default=2e-4)
 parser.add_argument('--beta1', type=float, default=0.5)
 parser.add_argument('--beta2', type=float, default=0.999)
+parser.add_argument('--save_freq', type=int, default=5)
 args = parser.parse_args()
 
-os.makedirs(args.model_path, exist_ok=True)
+model_path = args.model_path + args.exp_name + '/'
+os.makedirs(model_path, exist_ok=True)
 
 device = 'cuda:{}'.format(args.gpu_number) if torch.cuda.is_available() else 'cpu'
 # create dataset class
@@ -45,8 +48,8 @@ mse_loss = nn.MSELoss()
 # for patch GAN
 batch_size = args.batch_size
 # ToDo: fix tensor size according to discriminator output shape
-ones = torch.ones(batch_size, 1, 4, 4).to(device)
-zeros = torch.zeros(batch_size, 1, 4, 4).to(device)
+ones = torch.ones(batch_size, 1, 8, 8).to(device)
+zeros = torch.zeros(batch_size, 1, 8, 8).to(device)
 
 for e in range(args.epoch):
     loss_gene = 0
@@ -55,6 +58,7 @@ for e in range(args.epoch):
     for idx, data in enumerate(train_dataloader):
         
         real_rgb, real_pose_rgb, real_pose = data
+        # print(real_rgb.shape, real_pose_rgb.shape, real_pose.shape)
         batch_len = len(real_rgb)
         
         # adjust data format corresponding to device
@@ -88,12 +92,12 @@ for e in range(args.epoch):
         
         # Discriminator
         # real part
-        disc_real_input = torch.cat([real_rgb, real_rgb_pose], dim=1)
+        disc_real_input = torch.cat([real_rgb, real_pose_rgb], dim=1)
         real_out = discriminator(disc_real_input)
         loss_d_real = loss_func(real_out, ones[:batch_len])
         
         # fake part
-        disc_fake_input = torch.cat([fake_rgb_tensor, real_rgb_pose], dim=1)
+        disc_fake_input = torch.cat([fake_rgb_tensor, real_pose_rgb], dim=1)
         fake_out = discriminator(disc_fake_input)
         loss_d_fake = loss_func(fake_out, zeros[:batch_len])
         
@@ -107,20 +111,21 @@ for e in range(args.epoch):
         
         loss_gene += loss_g.item()
         loss_disc += loss_d.item()
+        print('===> Epoch[{}]({}/{}): Loss D: {:.4f}  Loss G: {:.4f}  Loss G BCE: {:.4f}  Loss G L1: {:.4f}  Loss G pose: {:.4f}'.format(e, idx, len(train_dataloader), loss_d.item(), loss_g.item(), loss_g_bce.item(), loss_g_l1.item(), loss_pose.item()))
         
     m_loss_g = loss_gene / len(train_dataloader)
     m_loss_d = loss_disc / len(train_dataloader)
         
-    print('=====> Epoch [{}]: Loss D: {:.4f}  Loss G: {:.4f}'.format(e, m_loss_d, m_loss_g))
+    # print('=====> Epoch [{}]: Loss D: {:.4f}  Loss G: {:.4f}'.format(e, m_loss_d, m_loss_g))
     
     if e % args.save_freq == 0:
         generator_state_dict = {'epoch': e, 'model': generator.state_dict(), 'optimizer':optimizer_g.state_dict(),
                                 'loss_g': loss_g}
-        generator_path = args.model_path + 'checkpoint_generator_%05d.pth.tar' % e
+        generator_path = model_path + 'checkpoint_generator_%05d.pth.tar' % e
         torch.save(generator_state_dict, generator_path)
         
         discriminator_state_dict = {'epoch': e, 'model': discriminator.state_dict(), 'optimizer':optimizer_d.state_dict(),
                                 'loss_g': loss_d}
-        discriminator_path = args.model_path + 'checkpoint_discriminator_%05d.pth.tar' % e
+        discriminator_path = model_path + 'checkpoint_discriminator_%05d.pth.tar' % e
         torch.save(discriminator_state_dict, discriminator_path)
         
